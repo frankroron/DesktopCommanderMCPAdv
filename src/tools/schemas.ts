@@ -90,7 +90,20 @@ export const SshExecuteCommandArgsSchema = z.object({
   command: z.string(),
   cwd: z.string().optional(),
   timeout: z.number().optional(),
+  internalTimeout: z.number().optional(),
+}).refine(data => data.password || data.privateKeyPath, {
+  message: 'Either password or privateKeyPath must be provided',
 });
+
+export const SshReadOutputArgsSchema = z.object({
+  id: z.string(),
+});
+
+export const SshForceTerminateArgsSchema = z.object({
+  id: z.string(),
+});
+
+export const SshListCommandSessionsArgsSchema = z.object({});
 
 export const SshUploadFileArgsSchema = z.object({
   host: z.string(),

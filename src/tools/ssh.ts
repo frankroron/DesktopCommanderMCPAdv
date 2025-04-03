@@ -1,12 +1,17 @@
 import { NodeSSH } from 'node-ssh';
 import fs from 'fs';
 import path from 'path';
+import { sshCommandManager } from './ssh-command-manager.js';
+import { DEFAULT_COMMAND_TIMEOUT } from '../config.js';
 
 /**
  * Executes a command on a remote server over SSH.
  * 
+ * This function will return immediate results for short-running commands,
+ * and provide streaming output capability for long-running commands.
+ * 
  * @param args - The SSH connection and command execution parameters
- * @returns A promise resolving to the output of the command execution
+ * @returns A promise resolving to the output of the command execution or a streaming session
  */
 export async function sshExecuteCommand(args: {
   host: string;
@@ -17,8 +22,20 @@ export async function sshExecuteCommand(args: {
   command: string;
   cwd?: string;
   timeout?: number;
+  internalTimeout?: number; // Timeout to determine if command is short or long-running
 }) {
-  const { host, port = 22, username, password, privateKeyPath, command, cwd, timeout } = args;
+  const { 
+    host, 
+    port = 22, 
+    username, 
+    password, 
+    privateKeyPath, 
+    command, 
+    cwd,
+    timeout, 
+    internalTimeout = 2000 // Default internal timeout of 2 seconds
+  } = args;
+  
   const ssh = new NodeSSH();
 
   try {
@@ -47,38 +64,93 @@ export async function sshExecuteCommand(args: {
     // Connect to the SSH server
     await ssh.connect(connectionConfig);
 
-    // Execute the command
-    const result = await ssh.execCommand(command, {
-      cwd,
-      execOptions: {
-        // If timeout is specified, set it
-        ...(timeout ? { timeout } : {}),
-      },
-      onStdout: (chunk) => {
-        // Optional: Handle real-time stdout if needed
-      },
-      onStderr: (chunk) => {
-        // Optional: Handle real-time stderr if needed
-      },
-    });
+    // Execute the command with streaming support
+    const result = await sshCommandManager.executeCommand(
+      ssh, 
+      command, 
+      cwd, 
+      internalTimeout
+    );
 
-    // Prepare the response
-    const response = {
-      stdout: result.stdout,
-      stderr: result.stderr,
-      code: result.code,
-      success: !result.code, // true if exit code is 0, false otherwise
+    // If command completed quickly, return complete result and dispose connection
+    if (!result.isBlocked) {
+      const response = {
+        stdout: result.output,
+        stderr: '', // All output is in stdout for completed commands
+        code: result.exitCode || 0,
+        success: !(result.exitCode), // true if exit code is 0, false otherwise
+      };
+      
+      // Close the SSH connection
+      ssh.dispose();
+      
+      return response;
+    } 
+    
+    // For long-running commands, return session ID for streaming
+    return {
+      id: result.id,
+      initialOutput: result.output,
+      isStreaming: true,
+      code: null,
+      success: null, // Unknown success status for streaming commands
     };
-
-    return response;
   } catch (error) {
+    // Clean up the SSH connection
+    ssh.dispose();
+    
     // Throw a more descriptive error message
     const errorMessage = error instanceof Error ? error.message : String(error);
     throw new Error(`SSH command execution error: ${errorMessage}`);
-  } finally {
-    // Always make sure to close the connection
-    ssh.dispose();
   }
+}
+
+/**
+ * Reads new output from a streaming SSH command
+ * 
+ * @param id - The SSH command session ID
+ * @returns The new output or completion status
+ */
+export async function sshReadOutput(id: string) {
+  const output = sshCommandManager.getNewOutput(id);
+  
+  return {
+    output: output || `No session found for ID ${id}`,
+    found: output !== null
+  };
+}
+
+/**
+ * Terminates a streaming SSH command
+ * 
+ * @param id - The SSH command session ID
+ * @returns Success status
+ */
+export async function sshForceTerminate(id: string) {
+  const success = sshCommandManager.forceTerminate(id);
+  
+  return {
+    success,
+    message: success 
+      ? `Successfully terminated SSH command session ${id}`
+      : `No active SSH command session found for ID ${id}`
+  };
+}
+
+/**
+ * Lists all active streaming SSH command sessions
+ * 
+ * @returns List of active sessions
+ */
+export async function sshListCommandSessions() {
+  const sessions = sshCommandManager.listActiveSessions();
+  
+  return {
+    sessions: sessions.map(s => ({
+      id: s.id,
+      runtimeSeconds: Math.round(s.runtime / 1000)
+    }))
+  };
 }
 
 /**

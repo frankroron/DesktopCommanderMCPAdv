@@ -27,6 +27,9 @@ import {
   EditBlockArgsSchema,
   SearchCodeArgsSchema,
   SshExecuteCommandArgsSchema,
+  SshReadOutputArgsSchema,
+  SshForceTerminateArgsSchema,
+  SshListCommandSessionsArgsSchema,
   SshUploadFileArgsSchema,
   SshDownloadFileArgsSchema,
 } from './tools/schemas.js';
@@ -53,7 +56,14 @@ import {
 } from './tools/filesystem.js';
 import { parseEditBlock, performSearchReplace } from './tools/edit.js';
 import { searchTextInFiles } from './tools/search.js';
-import { sshExecuteCommand, sshUploadFile, sshDownloadFile } from './tools/ssh.js';
+import { 
+  sshExecuteCommand, 
+  sshReadOutput, 
+  sshForceTerminate, 
+  sshListCommandSessions,
+  sshUploadFile, 
+  sshDownloadFile 
+} from './tools/ssh.js';
 import { 
   sshConnect, 
   sshRunInSession, 
@@ -259,8 +269,30 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         name: "ssh_execute_command",
         description:
           "Execute a command on a remote server over SSH, providing connection details and the command. " +
+          "For short commands, returns complete output immediately. For long-running commands, " +
+          "transitions to background processing with streaming output. " +
           "Use either password or privateKeyPath for authentication.",
         inputSchema: zodToJsonSchema(SshExecuteCommandArgsSchema),
+      },
+      {
+        name: "ssh_read_output",
+        description:
+          "Read new output from a running SSH command session. " +
+          "Use the session ID returned from ssh_execute_command for long-running commands.",
+        inputSchema: zodToJsonSchema(SshReadOutputArgsSchema),
+      },
+      {
+        name: "ssh_force_terminate",
+        description:
+          "Force terminate a running SSH command session. " +
+          "Use the session ID returned from ssh_execute_command for long-running commands.",
+        inputSchema: zodToJsonSchema(SshForceTerminateArgsSchema),
+      },
+      {
+        name: "ssh_list_command_sessions",
+        description:
+          "List all active SSH command sessions.",
+        inputSchema: zodToJsonSchema(SshListCommandSessionsArgsSchema),
       },
       {
         name: "ssh_upload_file",
@@ -580,20 +612,99 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
           const parsed = SshExecuteCommandArgsSchema.parse(args);
           const result = await sshExecuteCommand(parsed);
           
-          // Format the response in a user-friendly way
-          let responseText = `SSH Command Execution: ${parsed.command}\n`;
-          responseText += `Host: ${parsed.host}:${parsed.port} as ${parsed.username}\n`;
-          responseText += `Exit Code: ${result.code}\n`;
-          responseText += `Success: ${result.success ? 'Yes' : 'No'}\n\n`;
-          
-          // Add stdout if it exists
-          if (result.stdout) {
-            responseText += `===== STDOUT =====\n${result.stdout}\n`;
+          // Check if this is a streaming response or a completed command
+          if (result.isStreaming) {
+            // Format streaming response
+            let responseText = `SSH Command Execution (STREAMING): ${parsed.command}\n`;
+            responseText += `Host: ${parsed.host}:${parsed.port} as ${parsed.username}\n`;
+            responseText += `Session ID: ${result.id}\n\n`;
+            responseText += `Initial Output:\n${result.initialOutput || '(no output yet)'}\n\n`;
+            responseText += `Command is running in the background. Use ssh_read_output with Session ID to get more output.\n`;
+            responseText += `Use ssh_force_terminate with Session ID to stop the command if needed.`;
+            
+            return {
+              content: [{ type: "text", text: responseText }],
+            };
+          } else {
+            // Format immediate response for completed command
+            let responseText = `SSH Command Execution (COMPLETED): ${parsed.command}\n`;
+            responseText += `Host: ${parsed.host}:${parsed.port} as ${parsed.username}\n`;
+            responseText += `Exit Code: ${result.code}\n`;
+            responseText += `Success: ${result.success ? 'Yes' : 'No'}\n\n`;
+            
+            // Add output
+            responseText += `===== OUTPUT =====\n${result.stdout || '(no output)'}\n`;
+            
+            // Add stderr if separate and exists
+            if (result.stderr) {
+              responseText += `\n===== STDERR =====\n${result.stderr}\n`;
+            }
+            
+            return {
+              content: [{ type: "text", text: responseText }],
+            };
           }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: "text", text: `SSH Error: ${errorMessage}` }],
+            isError: true,
+          };
+        }
+      }
+
+      case "ssh_read_output": {
+        capture('server_ssh_read_output');
+        try {
+          const parsed = SshReadOutputArgsSchema.parse(args);
+          const result = await sshReadOutput(parsed.id);
           
-          // Add stderr if it exists
-          if (result.stderr) {
-            responseText += `\n===== STDERR =====\n${result.stderr}\n`;
+          let responseText = result.found 
+            ? `SSH Command Output for Session ${parsed.id}:\n\n${result.output}`
+            : `Error: ${result.output}`;
+          
+          return {
+            content: [{ type: "text", text: responseText }],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: "text", text: `SSH Read Output Error: ${errorMessage}` }],
+            isError: true,
+          };
+        }
+      }
+      
+      case "ssh_force_terminate": {
+        capture('server_ssh_force_terminate');
+        try {
+          const parsed = SshForceTerminateArgsSchema.parse(args);
+          const result = await sshForceTerminate(parsed.id);
+          
+          return {
+            content: [{ type: "text", text: result.message }],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: "text", text: `SSH Force Terminate Error: ${errorMessage}` }],
+            isError: true,
+          };
+        }
+      }
+      
+      case "ssh_list_command_sessions": {
+        capture('server_ssh_list_command_sessions');
+        try {
+          const result = await sshListCommandSessions();
+          
+          let responseText = "Active SSH Command Sessions:\n";
+          if (result.sessions.length === 0) {
+            responseText += "No active SSH command sessions.";
+          } else {
+            result.sessions.forEach(session => {
+              responseText += `- Session ID: ${session.id}, Runtime: ${session.runtimeSeconds}s\n`;
+            });
           }
           
           return {
@@ -602,7 +713,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
           return {
-            content: [{ type: "text", text: `SSH Error: ${errorMessage}` }],
+            content: [{ type: "text", text: `SSH List Command Sessions Error: ${errorMessage}` }],
             isError: true,
           };
         }
