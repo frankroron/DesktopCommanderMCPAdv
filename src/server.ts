@@ -30,6 +30,14 @@ import {
   SshUploadFileArgsSchema,
   SshDownloadFileArgsSchema,
 } from './tools/schemas.js';
+import {
+  sshConnectSchema,
+  sshRunInSessionSchema,
+  sshUploadInSessionSchema,
+  sshDownloadInSessionSchema,
+  sshDisconnectSchema,
+  sshListSessionsSchema,
+} from './tools/schemas/ssh-persistent.js';
 import { executeCommand, readOutput, forceTerminate, listSessions } from './tools/execute.js';
 import { listProcesses, killProcess } from './tools/process.js';
 import {
@@ -46,6 +54,14 @@ import {
 import { parseEditBlock, performSearchReplace } from './tools/edit.js';
 import { searchTextInFiles } from './tools/search.js';
 import { sshExecuteCommand, sshUploadFile, sshDownloadFile } from './tools/ssh.js';
+import { 
+  sshConnect, 
+  sshRunInSession, 
+  sshUploadInSession, 
+  sshDownloadInSession, 
+  sshDisconnect, 
+  sshListSessions 
+} from './tools/ssh-persistent.js';
 
 import { VERSION } from './version.js';
 import { capture } from "./utils.js";
@@ -261,6 +277,48 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           "Transfers a file from a remote server to the local file system. " +
           "Use either password or privateKeyPath for authentication.",
         inputSchema: zodToJsonSchema(SshDownloadFileArgsSchema),
+      },
+      {
+        name: "ssh_connect",
+        description:
+          "Establishes a connection to a remote server over SSH and returns a session identifier. " +
+          "The session can be reused for subsequent commands without re-authentication. " +
+          "Use either password or privateKeyPath for authentication.",
+        inputSchema: zodToJsonSchema(sshConnectSchema),
+      },
+      {
+        name: "ssh_run_in_session",
+        description:
+          "Execute a command on a remote server using an established SSH session. " +
+          "Requires a session identifier returned from ssh_connect.",
+        inputSchema: zodToJsonSchema(sshRunInSessionSchema),
+      },
+      {
+        name: "ssh_upload_in_session",
+        description:
+          "Upload a file to a remote server using an established SSH session. " +
+          "Requires a session identifier returned from ssh_connect.",
+        inputSchema: zodToJsonSchema(sshUploadInSessionSchema),
+      },
+      {
+        name: "ssh_download_in_session",
+        description:
+          "Download a file from a remote server using an established SSH session. " +
+          "Requires a session identifier returned from ssh_connect.",
+        inputSchema: zodToJsonSchema(sshDownloadInSessionSchema),
+      },
+      {
+        name: "ssh_disconnect",
+        description:
+          "Close an established SSH session. " +
+          "Requires a session identifier returned from ssh_connect.",
+        inputSchema: zodToJsonSchema(sshDisconnectSchema),
+      },
+      {
+        name: "ssh_list_sessions",
+        description:
+          "List all active SSH sessions.",
+        inputSchema: zodToJsonSchema(sshListSessionsSchema),
       },
     ],
   };
@@ -597,6 +655,141 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
           const errorMessage = error instanceof Error ? error.message : String(error);
           return {
             content: [{ type: "text", text: `SSH Download Error: ${errorMessage}` }],
+            isError: true,
+          };
+        }
+      }
+      
+      // Persistent SSH Session tools
+      case "ssh_connect": {
+        capture('server_ssh_connect');
+        try {
+          const parsed = sshConnectSchema.parse(args);
+          const result = await sshConnect(parsed);
+          
+          return {
+            content: [{ 
+              type: "text", 
+              text: `SSH Connection Established\nSession ID: ${result.sessionId}\n\nUse this session ID for subsequent SSH operations.` 
+            }],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: "text", text: `SSH Connection Error: ${errorMessage}` }],
+            isError: true,
+          };
+        }
+      }
+      
+      case "ssh_run_in_session": {
+        capture('server_ssh_run_in_session');
+        try {
+          const parsed = sshRunInSessionSchema.parse(args);
+          const result = await sshRunInSession(parsed);
+          
+          // Format the response in a user-friendly way
+          let responseText = `SSH Command Execution in Session: ${parsed.sessionId}\n`;
+          responseText += `Command: ${parsed.command}\n`;
+          responseText += `Exit Code: ${result.code}\n\n`;
+          
+          // Add stdout if it exists
+          if (result.stdout) {
+            responseText += `===== STDOUT =====\n${result.stdout}\n`;
+          }
+          
+          // Add stderr if it exists
+          if (result.stderr) {
+            responseText += `\n===== STDERR =====\n${result.stderr}\n`;
+          }
+          
+          return {
+            content: [{ type: "text", text: responseText }],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: "text", text: `SSH Command Execution Error: ${errorMessage}` }],
+            isError: true,
+          };
+        }
+      }
+      
+      case "ssh_upload_in_session": {
+        capture('server_ssh_upload_in_session');
+        try {
+          const parsed = sshUploadInSessionSchema.parse(args);
+          const result = await sshUploadInSession(parsed);
+          
+          return {
+            content: [{ type: "text", text: result.message }],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: "text", text: `SSH File Upload Error: ${errorMessage}` }],
+            isError: true,
+          };
+        }
+      }
+      
+      case "ssh_download_in_session": {
+        capture('server_ssh_download_in_session');
+        try {
+          const parsed = sshDownloadInSessionSchema.parse(args);
+          const result = await sshDownloadInSession(parsed);
+          
+          return {
+            content: [{ type: "text", text: result.message }],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: "text", text: `SSH File Download Error: ${errorMessage}` }],
+            isError: true,
+          };
+        }
+      }
+      
+      case "ssh_disconnect": {
+        capture('server_ssh_disconnect');
+        try {
+          const parsed = sshDisconnectSchema.parse(args);
+          const result = await sshDisconnect(parsed);
+          
+          return {
+            content: [{ type: "text", text: result.message }],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: "text", text: `SSH Disconnect Error: ${errorMessage}` }],
+            isError: true,
+          };
+        }
+      }
+      
+      case "ssh_list_sessions": {
+        capture('server_ssh_list_sessions');
+        try {
+          const result = await sshListSessions();
+          
+          let responseText = "Active SSH Sessions:\n";
+          if (result.sessions.length === 0) {
+            responseText += "No active SSH sessions.";
+          } else {
+            result.sessions.forEach(sessionId => {
+              responseText += `- ${sessionId}\n`;
+            });
+          }
+          
+          return {
+            content: [{ type: "text", text: responseText }],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: "text", text: `SSH List Sessions Error: ${errorMessage}` }],
             isError: true,
           };
         }
