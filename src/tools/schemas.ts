@@ -79,3 +79,15 @@ export const SearchCodeArgsSchema = z.object({
 export const EditBlockArgsSchema = z.object({
   blockContent: z.string(),
 });
+
+// SSH tools schemas
+export const SshExecuteCommandArgsSchema = z.object({
+  host: z.string(),
+  port: z.number().optional().default(22),
+  username: z.string(),
+  password: z.string().optional(),
+  privateKeyPath: z.string().optional(),
+  command: z.string(),
+  cwd: z.string().optional(),
+  timeout: z.number().optional(),
+});

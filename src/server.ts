@@ -26,6 +26,7 @@ import {
   GetFileInfoArgsSchema,
   EditBlockArgsSchema,
   SearchCodeArgsSchema,
+  SshExecuteCommandArgsSchema,
 } from './tools/schemas.js';
 import { executeCommand, readOutput, forceTerminate, listSessions } from './tools/execute.js';
 import { listProcesses, killProcess } from './tools/process.js';
@@ -42,6 +43,7 @@ import {
 } from './tools/filesystem.js';
 import { parseEditBlock, performSearchReplace } from './tools/edit.js';
 import { searchTextInFiles } from './tools/search.js';
+import { sshExecuteCommand } from './tools/ssh.js';
 
 import { VERSION } from './version.js';
 import { capture } from "./utils.js";
@@ -234,6 +236,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             "Call repeatedly to change multiple blocks. Will verify changes after application. " +
             "Format:\nfilepath\n<<<<<<< SEARCH\ncontent to find\n=======\nnew content\n>>>>>>> REPLACE",
         inputSchema: zodToJsonSchema(EditBlockArgsSchema),
+      },
+      {
+        name: "ssh_execute_command",
+        description:
+          "Execute a command on a remote server over SSH, providing connection details and the command. " +
+          "Use either password or privateKeyPath for authentication.",
+        inputSchema: zodToJsonSchema(SshExecuteCommandArgsSchema),
       },
     ],
   };
@@ -488,6 +497,39 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
             text: `Allowed directories:\n${directories.join('\n')}` 
           }],
         };
+      }
+      case "ssh_execute_command": {
+        capture('server_ssh_execute_command');
+        try {
+          const parsed = SshExecuteCommandArgsSchema.parse(args);
+          const result = await sshExecuteCommand(parsed);
+          
+          // Format the response in a user-friendly way
+          let responseText = `SSH Command Execution: ${parsed.command}\n`;
+          responseText += `Host: ${parsed.host}:${parsed.port} as ${parsed.username}\n`;
+          responseText += `Exit Code: ${result.code}\n`;
+          responseText += `Success: ${result.success ? 'Yes' : 'No'}\n\n`;
+          
+          // Add stdout if it exists
+          if (result.stdout) {
+            responseText += `===== STDOUT =====\n${result.stdout}\n`;
+          }
+          
+          // Add stderr if it exists
+          if (result.stderr) {
+            responseText += `\n===== STDERR =====\n${result.stderr}\n`;
+          }
+          
+          return {
+            content: [{ type: "text", text: responseText }],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: "text", text: `SSH Error: ${errorMessage}` }],
+            isError: true,
+          };
+        }
       }
 
       default:

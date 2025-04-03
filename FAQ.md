@@ -234,6 +234,17 @@ Claude Desktop Commander has a sophisticated system for managing commands that m
 
 This allows Claude to manage processes that would normally exceed conversation timeouts, such as video encoding, large file operations, or complex builds.
 
+### Can I use it to manage remote servers?
+
+Yes! The `ssh_execute_command` tool allows you to execute commands on remote servers via SSH. Key features include:
+
+1. Support for both password and private key authentication
+2. Configurable port, working directory, and timeout settings 
+3. Clearly formatted command output with both stdout and stderr
+4. Detailed error handling for connection and authentication issues
+
+This feature is perfect for server administration, deployments, monitoring, and other remote management tasks without having to switch between tools.
+
 ### Can I use it for non-coding tasks?
 
 Absolutely. While it excels at coding-related tasks, Claude Desktop Commander can be used for many system tasks:
@@ -262,6 +273,22 @@ Recent updates have removed path limitations, and work is in progress to add con
 ### What commands are blocked by default?
 
 Claude Desktop Commander doesn't have a pre-defined blocklist, but you can use the `block_command` and `unblock_command` functions to manage which commands Claude can execute. It's recommended to block commands that could potentially be destructive, such as `rm -rf` or `format`.
+
+### Are there security concerns with the SSH tool?
+
+The SSH command execution tool comes with some important security considerations:
+
+1. **Credential handling**: SSH credentials (passwords or private key paths) are only used for the specific command execution and are not stored by the tool.
+
+2. **Authentication options**: For better security, use private key authentication rather than passwords when possible.
+
+3. **Command limitations**: Consider limiting SSH commands to non-destructive operations, especially on production systems.
+
+4. **Conversation privacy**: Be careful about sharing conversations that contain SSH credentials, as this could expose server access.
+
+5. **Key permissions**: Ensure private keys have proper permissions and are stored securely on your system.
+
+For maximum security, consider using temporary credentials or dedicated keys with limited permissions when performing SSH operations through the tool.
 
 ## Usage Scenarios
 
