@@ -236,14 +236,17 @@ This allows Claude to manage processes that would normally exceed conversation t
 
 ### Can I use it to manage remote servers?
 
-Yes! The `ssh_execute_command` tool allows you to execute commands on remote servers via SSH. Key features include:
+Yes! The SSH tools allow you complete management of remote servers. Key features include:
 
-1. Support for both password and private key authentication
-2. Configurable port, working directory, and timeout settings 
-3. Clearly formatted command output with both stdout and stderr
-4. Detailed error handling for connection and authentication issues
+1. **Command execution:** The `ssh_execute_command` tool lets you run shell commands on remote servers
+2. **File uploads:** The `ssh_upload_file` tool transfers files from your local machine to remote servers using SFTP
+3. **File downloads:** The `ssh_download_file` tool retrieves files from remote servers to your local machine using SFTP
+4. **Flexible authentication:** All SSH tools support both password and private key authentication
+5. **Configuration options:** Customizable port, working directory, and timeout settings
+6. **Error handling:** Detailed error messages for connection, authentication, and file transfer issues
+7. **Path validation:** Automatic verification of local and remote paths before transfers
 
-This feature is perfect for server administration, deployments, monitoring, and other remote management tasks without having to switch between tools.
+These features make Claude Desktop Commander perfect for server administration, deployments, monitoring, log retrieval, configuration management, and other remote tasks without needing separate SFTP tools or commands.
 
 ### Can I use it for non-coding tasks?
 
@@ -274,19 +277,46 @@ Recent updates have removed path limitations, and work is in progress to add con
 
 Claude Desktop Commander doesn't have a pre-defined blocklist, but you can use the `block_command` and `unblock_command` functions to manage which commands Claude can execute. It's recommended to block commands that could potentially be destructive, such as `rm -rf` or `format`.
 
-### Are there security concerns with the SSH tool?
+### How do the SSH file transfer tools work?
 
-The SSH command execution tool comes with some important security considerations:
+The SSH file transfer functionality is built on the SFTP protocol (SSH File Transfer Protocol) using the `node-ssh` library. Here's how they work:
 
-1. **Credential handling**: SSH credentials (passwords or private key paths) are only used for the specific command execution and are not stored by the tool.
+1. **Upload files (`ssh_upload_file`):**
+   - Takes parameters for connection details (host, port, username), authentication (password or private key path), and file paths (local and remote)
+   - Verifies the local file exists and is readable before attempting transfer
+   - Establishes a secure SSH connection
+   - Transfers the file using the SFTP protocol
+   - Provides detailed success or error messages
+
+2. **Download files (`ssh_download_file`):**
+   - Takes the same connection and authentication parameters, plus remote and local file paths
+   - Automatically creates the local directory if it doesn't exist
+   - Establishes a secure SSH connection
+   - Downloads the file using the SFTP protocol
+   - Provides detailed success or error messages
+
+These tools are perfect for:
+- Uploading configuration files to servers
+- Deploying application files
+- Retrieving log files for analysis
+- Backing up remote data
+- Syncing files between local and remote environments
+
+### Are there security concerns with the SSH tools?
+
+The SSH tools come with some important security considerations:
+
+1. **Credential handling**: SSH credentials (passwords or private key paths) are only used for the specific operation and are not stored by the tool.
 
 2. **Authentication options**: For better security, use private key authentication rather than passwords when possible.
 
-3. **Command limitations**: Consider limiting SSH commands to non-destructive operations, especially on production systems.
+3. **Command and file limitations**: Consider limiting SSH operations to non-destructive actions, especially on production systems. Be careful when transferring files to critical system paths.
 
 4. **Conversation privacy**: Be careful about sharing conversations that contain SSH credentials, as this could expose server access.
 
 5. **Key permissions**: Ensure private keys have proper permissions and are stored securely on your system.
+
+6. **Path validation**: While the tools perform basic path validation, you should still verify paths are correct before transferring files to or from critical locations.
 
 For maximum security, consider using temporary credentials or dedicated keys with limited permissions when performing SSH operations through the tool.
 

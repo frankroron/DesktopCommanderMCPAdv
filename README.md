@@ -121,6 +121,8 @@ The server provides these tool categories:
 - `kill_process`: Terminate processes by PID
 - `block_command`/`unblock_command`: Manage command blacklist
 - `ssh_execute_command`: Execute commands on remote servers via SSH
+- `ssh_upload_file`: Upload files to remote servers via SSH/SFTP
+- `ssh_download_file`: Download files from remote servers via SSH/SFTP
 
 ### Filesystem Tools
 - `read_file`/`write_file`: File operations
@@ -299,7 +301,12 @@ No. This tool works with Claude Desktop's standard Pro subscription ($20/month),
 - Managing remote servers via SSH commands
 
 ### Can I use this tool to manage remote servers?
-Yes! The `ssh_execute_command` tool allows you to execute commands on remote servers via SSH. You can provide either password or private key authentication, and Claude will connect to your server and execute the commands you specify. This is great for system administration, deployments, and monitoring.
+Yes! The SSH tools allow you to interact with remote servers in several ways:
+- `ssh_execute_command`: Execute shell commands on remote servers
+- `ssh_upload_file`: Transfer files from your local machine to remote servers
+- `ssh_download_file`: Download files from remote servers to your local machine
+
+All SSH tools support both password and private key authentication. This makes it easy to manage configuration files, deploy artifacts, retrieve logs, and perform other remote administration tasks without needing separate SFTP tools or commands.
 
 ### I'm having trouble installing or using the tool. Where can I get help?
 Join our [Discord server](https://discord.gg/kQ27sNnZr7) for community support, check the [GitHub issues](https://github.com/wonderwhy-er/ClaudeComputerCommander/issues) for known problems, or review the [full FAQ](FAQ.md) for troubleshooting tips. You can also visit our [website FAQ section](https://desktopcommander.app#faq) for a more user-friendly experience. If you encounter a new issue, please consider [opening a GitHub issue](https://github.com/wonderwhy-er/ClaudeComputerCommander/issues/new) with details about your problem.

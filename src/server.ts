@@ -27,6 +27,8 @@ import {
   EditBlockArgsSchema,
   SearchCodeArgsSchema,
   SshExecuteCommandArgsSchema,
+  SshUploadFileArgsSchema,
+  SshDownloadFileArgsSchema,
 } from './tools/schemas.js';
 import { executeCommand, readOutput, forceTerminate, listSessions } from './tools/execute.js';
 import { listProcesses, killProcess } from './tools/process.js';
@@ -43,7 +45,7 @@ import {
 } from './tools/filesystem.js';
 import { parseEditBlock, performSearchReplace } from './tools/edit.js';
 import { searchTextInFiles } from './tools/search.js';
-import { sshExecuteCommand } from './tools/ssh.js';
+import { sshExecuteCommand, sshUploadFile, sshDownloadFile } from './tools/ssh.js';
 
 import { VERSION } from './version.js';
 import { capture } from "./utils.js";
@@ -243,6 +245,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           "Execute a command on a remote server over SSH, providing connection details and the command. " +
           "Use either password or privateKeyPath for authentication.",
         inputSchema: zodToJsonSchema(SshExecuteCommandArgsSchema),
+      },
+      {
+        name: "ssh_upload_file",
+        description:
+          "Upload a file to a remote server over SSH/SFTP. " +
+          "Transfers a file from the local file system to a remote server. " +
+          "Use either password or privateKeyPath for authentication.",
+        inputSchema: zodToJsonSchema(SshUploadFileArgsSchema),
+      },
+      {
+        name: "ssh_download_file",
+        description:
+          "Download a file from a remote server over SSH/SFTP. " +
+          "Transfers a file from a remote server to the local file system. " +
+          "Use either password or privateKeyPath for authentication.",
+        inputSchema: zodToJsonSchema(SshDownloadFileArgsSchema),
       },
     ],
   };
@@ -527,6 +545,58 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
           const errorMessage = error instanceof Error ? error.message : String(error);
           return {
             content: [{ type: "text", text: `SSH Error: ${errorMessage}` }],
+            isError: true,
+          };
+        }
+      }
+      
+      case "ssh_upload_file": {
+        capture('server_ssh_upload_file');
+        try {
+          const parsed = SshUploadFileArgsSchema.parse(args);
+          const result = await sshUploadFile(parsed);
+          
+          // Format the response in a user-friendly way
+          let responseText = `SSH File Upload\n`;
+          responseText += `Host: ${parsed.host}:${parsed.port} as ${parsed.username}\n`;
+          responseText += `Local Path: ${parsed.localPath}\n`;
+          responseText += `Remote Path: ${parsed.remotePath}\n`;
+          responseText += `Result: ${result.success ? 'Success' : 'Failed'}\n`;
+          responseText += `Message: ${result.message}\n`;
+          
+          return {
+            content: [{ type: "text", text: responseText }],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: "text", text: `SSH Upload Error: ${errorMessage}` }],
+            isError: true,
+          };
+        }
+      }
+      
+      case "ssh_download_file": {
+        capture('server_ssh_download_file');
+        try {
+          const parsed = SshDownloadFileArgsSchema.parse(args);
+          const result = await sshDownloadFile(parsed);
+          
+          // Format the response in a user-friendly way
+          let responseText = `SSH File Download\n`;
+          responseText += `Host: ${parsed.host}:${parsed.port} as ${parsed.username}\n`;
+          responseText += `Remote Path: ${parsed.remotePath}\n`;
+          responseText += `Local Path: ${parsed.localPath}\n`;
+          responseText += `Result: ${result.success ? 'Success' : 'Failed'}\n`;
+          responseText += `Message: ${result.message}\n`;
+          
+          return {
+            content: [{ type: "text", text: responseText }],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: "text", text: `SSH Download Error: ${errorMessage}` }],
             isError: true,
           };
         }

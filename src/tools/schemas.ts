@@ -91,3 +91,25 @@ export const SshExecuteCommandArgsSchema = z.object({
   cwd: z.string().optional(),
   timeout: z.number().optional(),
 });
+
+export const SshUploadFileArgsSchema = z.object({
+  host: z.string(),
+  port: z.number().optional().default(22),
+  username: z.string(),
+  password: z.string().optional(),
+  privateKeyPath: z.string().optional(),
+  localPath: z.string(),
+  remotePath: z.string(),
+  timeout: z.number().optional(),
+});
+
+export const SshDownloadFileArgsSchema = z.object({
+  host: z.string(),
+  port: z.number().optional().default(22),
+  username: z.string(),
+  password: z.string().optional(),
+  privateKeyPath: z.string().optional(),
+  remotePath: z.string(),
+  localPath: z.string(),
+  timeout: z.number().optional(),
+});
