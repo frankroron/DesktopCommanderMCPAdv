@@ -120,6 +120,9 @@ The server provides these tool categories:
 - `list_processes`: View system processes
 - `kill_process`: Terminate processes by PID
 - `block_command`/`unblock_command`: Manage command blacklist
+- `ssh_execute_command`: Execute commands on remote servers via SSH
+- `ssh_upload_file`: Upload files to remote servers via SSH/SFTP
+- `ssh_download_file`: Download files from remote servers via SSH/SFTP
 
 ### Filesystem Tools
 - `read_file`/`write_file`: File operations
@@ -133,11 +136,7 @@ The server provides these tool categories:
 - `edit_block`: Apply surgical text replacements (best for changes <20% of file size)
 - `write_file`: Complete file rewrites (best for large changes >20% or when edit_block fails)
 
-Search/Replace Block Format:
-```
-filepath.ext
-<<<<<<< SEARCH
-content to find
+new content
 =======
 new content
 >>>>>>> REPLACE
@@ -219,7 +218,7 @@ The following features are currently being developed or planned:
 - **Windows environment fixes** ([in progress](https://github.com/wonderwhy-er/ClaudeDesktopCommander/pull/13)) - Resolving issues specific to Windows platforms
 - **Linux improvements** ([in progress](https://github.com/wonderwhy-er/ClaudeDesktopCommander/pull/12)) - Enhancing compatibility with various Linux distributions
 - **Support for WSL** - Windows Subsystem for Linux integration
-- **Support for SSH** - Remote server command execution
+- **Enhanced SSH capabilities** - Additional SSH features beyond the basic command execution
 - **Installation troubleshooting guide** - Comprehensive help for setup issues
 
 ## Website
@@ -299,6 +298,15 @@ No. This tool works with Claude Desktop's standard Pro subscription ($20/month),
 - Automating tasks across your system
 - Working with multiple projects simultaneously
 - Making surgical code changes with precise control
+- Managing remote servers via SSH commands
+
+### Can I use this tool to manage remote servers?
+Yes! The SSH tools allow you to interact with remote servers in several ways:
+- `ssh_execute_command`: Execute shell commands on remote servers
+- `ssh_upload_file`: Transfer files from your local machine to remote servers
+- `ssh_download_file`: Download files from remote servers to your local machine
+
+All SSH tools support both password and private key authentication. This makes it easy to manage configuration files, deploy artifacts, retrieve logs, and perform other remote administration tasks without needing separate SFTP tools or commands.
 
 ### I'm having trouble installing or using the tool. Where can I get help?
 Join our [Discord server](https://discord.gg/kQ27sNnZr7) for community support, check the [GitHub issues](https://github.com/wonderwhy-er/ClaudeComputerCommander/issues) for known problems, or review the [full FAQ](FAQ.md) for troubleshooting tips. You can also visit our [website FAQ section](https://desktopcommander.app#faq) for a more user-friendly experience. If you encounter a new issue, please consider [opening a GitHub issue](https://github.com/wonderwhy-er/ClaudeComputerCommander/issues/new) with details about your problem.

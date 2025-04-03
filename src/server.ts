@@ -26,7 +26,21 @@ import {
   GetFileInfoArgsSchema,
   EditBlockArgsSchema,
   SearchCodeArgsSchema,
+  SshExecuteCommandArgsSchema,
+  SshReadOutputArgsSchema,
+  SshForceTerminateArgsSchema,
+  SshListCommandSessionsArgsSchema,
+  SshUploadFileArgsSchema,
+  SshDownloadFileArgsSchema,
 } from './tools/schemas.js';
+import {
+  sshConnectSchema,
+  sshRunInSessionSchema,
+  sshUploadInSessionSchema,
+  sshDownloadInSessionSchema,
+  sshDisconnectSchema,
+  sshListSessionsSchema,
+} from './tools/schemas/ssh-persistent.js';
 import { executeCommand, readOutput, forceTerminate, listSessions } from './tools/execute.js';
 import { listProcesses, killProcess } from './tools/process.js';
 import {
@@ -42,6 +56,22 @@ import {
 } from './tools/filesystem.js';
 import { parseEditBlock, performSearchReplace } from './tools/edit.js';
 import { searchTextInFiles } from './tools/search.js';
+import { 
+  sshExecuteCommand, 
+  sshReadOutput, 
+  sshForceTerminate, 
+  sshListCommandSessions,
+  sshUploadFile, 
+  sshDownloadFile 
+} from './tools/ssh.js';
+import { 
+  sshConnect, 
+  sshRunInSession, 
+  sshUploadInSession, 
+  sshDownloadInSession, 
+  sshDisconnect, 
+  sshListSessions 
+} from './tools/ssh-persistent.js';
 
 import { VERSION } from './version.js';
 import { capture } from "./utils.js";
@@ -234,6 +264,93 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             "Call repeatedly to change multiple blocks. Will verify changes after application. " +
             "Format:\nfilepath\n<<<<<<< SEARCH\ncontent to find\n=======\nnew content\n>>>>>>> REPLACE",
         inputSchema: zodToJsonSchema(EditBlockArgsSchema),
+      },
+      {
+        name: "ssh_execute_command",
+        description:
+          "Execute a command on a remote server over SSH, providing connection details and the command. " +
+          "For short commands, returns complete output immediately. For long-running commands, " +
+          "transitions to background processing with streaming output. " +
+          "Use either password or privateKeyPath for authentication.",
+        inputSchema: zodToJsonSchema(SshExecuteCommandArgsSchema),
+      },
+      {
+        name: "ssh_read_output",
+        description:
+          "Read new output from a running SSH command session. " +
+          "Use the session ID returned from ssh_execute_command for long-running commands.",
+        inputSchema: zodToJsonSchema(SshReadOutputArgsSchema),
+      },
+      {
+        name: "ssh_force_terminate",
+        description:
+          "Force terminate a running SSH command session. " +
+          "Use the session ID returned from ssh_execute_command for long-running commands.",
+        inputSchema: zodToJsonSchema(SshForceTerminateArgsSchema),
+      },
+      {
+        name: "ssh_list_command_sessions",
+        description:
+          "List all active SSH command sessions.",
+        inputSchema: zodToJsonSchema(SshListCommandSessionsArgsSchema),
+      },
+      {
+        name: "ssh_upload_file",
+        description:
+          "Upload a file to a remote server over SSH/SFTP. " +
+          "Transfers a file from the local file system to a remote server. " +
+          "Use either password or privateKeyPath for authentication.",
+        inputSchema: zodToJsonSchema(SshUploadFileArgsSchema),
+      },
+      {
+        name: "ssh_download_file",
+        description:
+          "Download a file from a remote server over SSH/SFTP. " +
+          "Transfers a file from a remote server to the local file system. " +
+          "Use either password or privateKeyPath for authentication.",
+        inputSchema: zodToJsonSchema(SshDownloadFileArgsSchema),
+      },
+      {
+        name: "ssh_connect",
+        description:
+          "Establishes a connection to a remote server over SSH and returns a session identifier. " +
+          "The session can be reused for subsequent commands without re-authentication. " +
+          "Use either password or privateKeyPath for authentication.",
+        inputSchema: zodToJsonSchema(sshConnectSchema),
+      },
+      {
+        name: "ssh_run_in_session",
+        description:
+          "Execute a command on a remote server using an established SSH session. " +
+          "Requires a session identifier returned from ssh_connect.",
+        inputSchema: zodToJsonSchema(sshRunInSessionSchema),
+      },
+      {
+        name: "ssh_upload_in_session",
+        description:
+          "Upload a file to a remote server using an established SSH session. " +
+          "Requires a session identifier returned from ssh_connect.",
+        inputSchema: zodToJsonSchema(sshUploadInSessionSchema),
+      },
+      {
+        name: "ssh_download_in_session",
+        description:
+          "Download a file from a remote server using an established SSH session. " +
+          "Requires a session identifier returned from ssh_connect.",
+        inputSchema: zodToJsonSchema(sshDownloadInSessionSchema),
+      },
+      {
+        name: "ssh_disconnect",
+        description:
+          "Close an established SSH session. " +
+          "Requires a session identifier returned from ssh_connect.",
+        inputSchema: zodToJsonSchema(sshDisconnectSchema),
+      },
+      {
+        name: "ssh_list_sessions",
+        description:
+          "List all active SSH sessions.",
+        inputSchema: zodToJsonSchema(sshListSessionsSchema),
       },
     ],
   };
@@ -488,6 +605,322 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
             text: `Allowed directories:\n${directories.join('\n')}` 
           }],
         };
+      }
+      case "ssh_execute_command": {
+        capture('server_ssh_execute_command');
+        try {
+          const parsed = SshExecuteCommandArgsSchema.parse(args);
+          const result = await sshExecuteCommand(parsed);
+          
+          // Type guard to narrow down the result type
+          if ('isStreaming' in result && result.isStreaming) {
+            // We know this is a streaming result type with these properties
+            const streamingResult = result as { 
+              id: string; 
+              initialOutput: string; 
+              isStreaming: boolean;
+              code: null;
+              success: null;
+            };
+            
+            // Format streaming response for long-running commands
+            let responseText = `SSH Command Execution (STREAMING): ${parsed.command}\n`;
+            responseText += `Host: ${parsed.host}:${parsed.port} as ${parsed.username}\n`;
+            responseText += `Session ID: ${streamingResult.id}\n\n`;
+            responseText += `Initial Output:\n${streamingResult.initialOutput || '(no output yet)'}\n\n`;
+            responseText += `Command is running in the background. Use ssh_read_output with Session ID to get more output.\n`;
+            responseText += `Use ssh_force_terminate with Session ID to stop the command if needed.`;
+            
+            return {
+              content: [{ type: "text", text: responseText }],
+            };
+          } else {
+            // We know this is a completed result type with these properties
+            const completedResult = result as {
+              stdout: string;
+              stderr: string;
+              code: number;
+              success: boolean;
+            };
+            
+            // Format immediate response for completed commands
+            let responseText = `SSH Command Execution (COMPLETED): ${parsed.command}\n`;
+            responseText += `Host: ${parsed.host}:${parsed.port} as ${parsed.username}\n`;
+            responseText += `Exit Code: ${completedResult.code}\n`;
+            responseText += `Success: ${completedResult.success ? 'Yes' : 'No'}\n\n`;
+            
+            // Add output
+            responseText += `===== OUTPUT =====\n${completedResult.stdout || '(no output)'}\n`;
+            
+            // Add stderr if separate and exists
+            if (completedResult.stderr) {
+              responseText += `\n===== STDERR =====\n${completedResult.stderr}\n`;
+            }
+            
+            return {
+              content: [{ type: "text", text: responseText }],
+            };
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: "text", text: `SSH Error: ${errorMessage}` }],
+            isError: true,
+          };
+        }
+      }
+
+      case "ssh_read_output": {
+        capture('server_ssh_read_output');
+        try {
+          const parsed = SshReadOutputArgsSchema.parse(args);
+          const result = await sshReadOutput(parsed.id);
+          
+          let responseText = result.found 
+            ? `SSH Command Output for Session ${parsed.id}:\n\n${result.output}`
+            : `Error: ${result.output}`;
+          
+          return {
+            content: [{ type: "text", text: responseText }],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: "text", text: `SSH Read Output Error: ${errorMessage}` }],
+            isError: true,
+          };
+        }
+      }
+      
+      case "ssh_force_terminate": {
+        capture('server_ssh_force_terminate');
+        try {
+          const parsed = SshForceTerminateArgsSchema.parse(args);
+          const result = await sshForceTerminate(parsed.id);
+          
+          return {
+            content: [{ type: "text", text: result.message }],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: "text", text: `SSH Force Terminate Error: ${errorMessage}` }],
+            isError: true,
+          };
+        }
+      }
+      
+      case "ssh_list_command_sessions": {
+        capture('server_ssh_list_command_sessions');
+        try {
+          const result = await sshListCommandSessions();
+          
+          let responseText = "Active SSH Command Sessions:\n";
+          if (result.sessions.length === 0) {
+            responseText += "No active SSH command sessions.";
+          } else {
+            result.sessions.forEach(session => {
+              responseText += `- Session ID: ${session.id}, Runtime: ${session.runtimeSeconds}s\n`;
+            });
+          }
+          
+          return {
+            content: [{ type: "text", text: responseText }],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: "text", text: `SSH List Command Sessions Error: ${errorMessage}` }],
+            isError: true,
+          };
+        }
+      }
+      
+      case "ssh_upload_file": {
+        capture('server_ssh_upload_file');
+        try {
+          const parsed = SshUploadFileArgsSchema.parse(args);
+          const result = await sshUploadFile(parsed);
+          
+          // Format the response in a user-friendly way
+          let responseText = `SSH File Upload\n`;
+          responseText += `Host: ${parsed.host}:${parsed.port} as ${parsed.username}\n`;
+          responseText += `Local Path: ${parsed.localPath}\n`;
+          responseText += `Remote Path: ${parsed.remotePath}\n`;
+          responseText += `Result: ${result.success ? 'Success' : 'Failed'}\n`;
+          responseText += `Message: ${result.message}\n`;
+          
+          return {
+            content: [{ type: "text", text: responseText }],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: "text", text: `SSH Upload Error: ${errorMessage}` }],
+            isError: true,
+          };
+        }
+      }
+      
+      case "ssh_download_file": {
+        capture('server_ssh_download_file');
+        try {
+          const parsed = SshDownloadFileArgsSchema.parse(args);
+          const result = await sshDownloadFile(parsed);
+          
+          // Format the response in a user-friendly way
+          let responseText = `SSH File Download\n`;
+          responseText += `Host: ${parsed.host}:${parsed.port} as ${parsed.username}\n`;
+          responseText += `Remote Path: ${parsed.remotePath}\n`;
+          responseText += `Local Path: ${parsed.localPath}\n`;
+          responseText += `Result: ${result.success ? 'Success' : 'Failed'}\n`;
+          responseText += `Message: ${result.message}\n`;
+          
+          return {
+            content: [{ type: "text", text: responseText }],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: "text", text: `SSH Download Error: ${errorMessage}` }],
+            isError: true,
+          };
+        }
+      }
+      
+      // Persistent SSH Session tools
+      case "ssh_connect": {
+        capture('server_ssh_connect');
+        try {
+          const parsed = sshConnectSchema.parse(args);
+          const result = await sshConnect(parsed);
+          
+          return {
+            content: [{ 
+              type: "text", 
+              text: `SSH Connection Established\nSession ID: ${result.sessionId}\n\nUse this session ID for subsequent SSH operations.` 
+            }],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: "text", text: `SSH Connection Error: ${errorMessage}` }],
+            isError: true,
+          };
+        }
+      }
+      
+      case "ssh_run_in_session": {
+        capture('server_ssh_run_in_session');
+        try {
+          const parsed = sshRunInSessionSchema.parse(args);
+          const result = await sshRunInSession(parsed);
+          
+          // Format the response in a user-friendly way
+          let responseText = `SSH Command Execution in Session: ${parsed.sessionId}\n`;
+          responseText += `Command: ${parsed.command}\n`;
+          responseText += `Exit Code: ${result.code}\n\n`;
+          
+          // Add stdout if it exists
+          if (result.stdout) {
+            responseText += `===== STDOUT =====\n${result.stdout}\n`;
+          }
+          
+          // Add stderr if it exists
+          if (result.stderr) {
+            responseText += `\n===== STDERR =====\n${result.stderr}\n`;
+          }
+          
+          return {
+            content: [{ type: "text", text: responseText }],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: "text", text: `SSH Command Execution Error: ${errorMessage}` }],
+            isError: true,
+          };
+        }
+      }
+      
+      case "ssh_upload_in_session": {
+        capture('server_ssh_upload_in_session');
+        try {
+          const parsed = sshUploadInSessionSchema.parse(args);
+          const result = await sshUploadInSession(parsed);
+          
+          return {
+            content: [{ type: "text", text: result.message }],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: "text", text: `SSH File Upload Error: ${errorMessage}` }],
+            isError: true,
+          };
+        }
+      }
+      
+      case "ssh_download_in_session": {
+        capture('server_ssh_download_in_session');
+        try {
+          const parsed = sshDownloadInSessionSchema.parse(args);
+          const result = await sshDownloadInSession(parsed);
+          
+          return {
+            content: [{ type: "text", text: result.message }],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: "text", text: `SSH File Download Error: ${errorMessage}` }],
+            isError: true,
+          };
+        }
+      }
+      
+      case "ssh_disconnect": {
+        capture('server_ssh_disconnect');
+        try {
+          const parsed = sshDisconnectSchema.parse(args);
+          const result = await sshDisconnect(parsed);
+          
+          return {
+            content: [{ type: "text", text: result.message }],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: "text", text: `SSH Disconnect Error: ${errorMessage}` }],
+            isError: true,
+          };
+        }
+      }
+      
+      case "ssh_list_sessions": {
+        capture('server_ssh_list_sessions');
+        try {
+          const result = await sshListSessions();
+          
+          let responseText = "Active SSH Sessions:\n";
+          if (result.sessions.length === 0) {
+            responseText += "No active SSH sessions.";
+          } else {
+            result.sessions.forEach(sessionId => {
+              responseText += `- ${sessionId}\n`;
+            });
+          }
+          
+          return {
+            content: [{ type: "text", text: responseText }],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: "text", text: `SSH List Sessions Error: ${errorMessage}` }],
+            isError: true,
+          };
+        }
       }
 
       default:

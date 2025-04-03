@@ -79,3 +79,50 @@ export const SearchCodeArgsSchema = z.object({
 export const EditBlockArgsSchema = z.object({
   blockContent: z.string(),
 });
+
+// SSH tools schemas
+export const SshExecuteCommandArgsSchema = z.object({
+  host: z.string(),
+  port: z.number().optional().default(22),
+  username: z.string(),
+  password: z.string().optional(),
+  privateKeyPath: z.string().optional(),
+  command: z.string(),
+  cwd: z.string().optional(),
+  timeout: z.number().optional(),
+  internalTimeout: z.number().optional(),
+}).refine(data => data.password || data.privateKeyPath, {
+  message: 'Either password or privateKeyPath must be provided',
+});
+
+export const SshReadOutputArgsSchema = z.object({
+  id: z.string(),
+});
+
+export const SshForceTerminateArgsSchema = z.object({
+  id: z.string(),
+});
+
+export const SshListCommandSessionsArgsSchema = z.object({});
+
+export const SshUploadFileArgsSchema = z.object({
+  host: z.string(),
+  port: z.number().optional().default(22),
+  username: z.string(),
+  password: z.string().optional(),
+  privateKeyPath: z.string().optional(),
+  localPath: z.string(),
+  remotePath: z.string(),
+  timeout: z.number().optional(),
+});
+
+export const SshDownloadFileArgsSchema = z.object({
+  host: z.string(),
+  port: z.number().optional().default(22),
+  username: z.string(),
+  password: z.string().optional(),
+  privateKeyPath: z.string().optional(),
+  remotePath: z.string(),
+  localPath: z.string(),
+  timeout: z.number().optional(),
+});

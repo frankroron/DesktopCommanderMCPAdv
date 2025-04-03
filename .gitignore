@@ -36,4 +36,8 @@ coverage/
 .idea
 .history
 
+# Server logs
 server.log
+
+# Serena assistant files
+.serena/
