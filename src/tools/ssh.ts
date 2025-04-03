@@ -33,7 +33,7 @@ export async function sshExecuteCommand(args: {
     command, 
     cwd,
     timeout, 
-    internalTimeout = 2000 // Default internal timeout of 2 seconds
+    internalTimeout = 5000 // Default internal timeout of 5 seconds
   } = args;
   
   const ssh = new NodeSSH();

@@ -34,7 +34,7 @@ Executes a command on a remote server over SSH with automatic detection for shor
 - `port` (number, optional, default: 22): SSH port
 - `cwd` (string, optional): Working directory on remote server
 - `timeout` (number, optional): Overall command timeout
-- `internalTimeout` (number, optional, default: 2000): Timeout in milliseconds to determine if a command is short or long-running
+- `internalTimeout` (number, optional, default: 5000): Timeout in milliseconds to determine if a command is short or long-running
 
 **Note:** Either `password` or `privateKeyPath` must be provided.
 
