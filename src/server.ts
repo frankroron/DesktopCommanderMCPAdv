@@ -612,13 +612,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
           const parsed = SshExecuteCommandArgsSchema.parse(args);
           const result = await sshExecuteCommand(parsed);
           
-          // Check if this is a streaming response or a completed command
-          if (result.isStreaming) {
-            // Format streaming response
+          // Type guard to narrow down the result type
+          if ('isStreaming' in result && result.isStreaming) {
+            // We know this is a streaming result type with these properties
+            const streamingResult = result as { 
+              id: string; 
+              initialOutput: string; 
+              isStreaming: boolean;
+              code: null;
+              success: null;
+            };
+            
+            // Format streaming response for long-running commands
             let responseText = `SSH Command Execution (STREAMING): ${parsed.command}\n`;
             responseText += `Host: ${parsed.host}:${parsed.port} as ${parsed.username}\n`;
-            responseText += `Session ID: ${result.id}\n\n`;
-            responseText += `Initial Output:\n${result.initialOutput || '(no output yet)'}\n\n`;
+            responseText += `Session ID: ${streamingResult.id}\n\n`;
+            responseText += `Initial Output:\n${streamingResult.initialOutput || '(no output yet)'}\n\n`;
             responseText += `Command is running in the background. Use ssh_read_output with Session ID to get more output.\n`;
             responseText += `Use ssh_force_terminate with Session ID to stop the command if needed.`;
             
@@ -626,18 +635,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
               content: [{ type: "text", text: responseText }],
             };
           } else {
-            // Format immediate response for completed command
+            // We know this is a completed result type with these properties
+            const completedResult = result as {
+              stdout: string;
+              stderr: string;
+              code: number;
+              success: boolean;
+            };
+            
+            // Format immediate response for completed commands
             let responseText = `SSH Command Execution (COMPLETED): ${parsed.command}\n`;
             responseText += `Host: ${parsed.host}:${parsed.port} as ${parsed.username}\n`;
-            responseText += `Exit Code: ${result.code}\n`;
-            responseText += `Success: ${result.success ? 'Yes' : 'No'}\n\n`;
+            responseText += `Exit Code: ${completedResult.code}\n`;
+            responseText += `Success: ${completedResult.success ? 'Yes' : 'No'}\n\n`;
             
             // Add output
-            responseText += `===== OUTPUT =====\n${result.stdout || '(no output)'}\n`;
+            responseText += `===== OUTPUT =====\n${completedResult.stdout || '(no output)'}\n`;
             
             // Add stderr if separate and exists
-            if (result.stderr) {
-              responseText += `\n===== STDERR =====\n${result.stderr}\n`;
+            if (completedResult.stderr) {
+              responseText += `\n===== STDERR =====\n${completedResult.stderr}\n`;
             }
             
             return {
