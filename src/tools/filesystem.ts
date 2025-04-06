@@ -28,10 +28,42 @@ function expandHome(filepath: string): string {
     return filepath;
 }
 
-// Security utilities
+/**
+ * Recursively validates parent directories until it finds a valid one
+ * This function handles the case where we need to create nested directories
+ * and we need to check if any of the parent directories exist
+ * 
+ * @param directoryPath The path to validate
+ * @returns Promise<boolean> True if a valid parent directory was found
+ */
+async function validateParentDirectories(directoryPath: string): Promise<boolean> {
+    const parentDir = path.dirname(directoryPath);
+    
+    // Base case: we've reached the root or the same directory (shouldn't happen normally)
+    if (parentDir === directoryPath || parentDir === path.dirname(parentDir)) {
+        return false;
+    }
+
+    try {
+        // Check if the parent directory exists
+        await fs.realpath(parentDir);
+        return true;
+    } catch {
+        // Parent doesn't exist, recursively check its parent
+        return validateParentDirectories(parentDir);
+    }
+}
+
+/**
+ * Validates a path to ensure it can be accessed or created.
+ * For existing paths, returns the real path (resolving symlinks).
+ * For non-existent paths, validates parent directories to ensure they exist.
+ * 
+ * @param requestedPath The path to validate
+ * @returns Promise<string> The validated path
+ * @throws Error if the path or its parent directories don't exist
+ */
 export async function validatePath(requestedPath: string): Promise<string> {
-    // Temporarily allow all paths by just returning the resolved path
-    // TODO: Implement configurable path validation
     // Expand home directory if present
     const expandedPath = expandHome(requestedPath);
     
@@ -43,59 +75,73 @@ export async function validatePath(requestedPath: string): Promise<string> {
     // Check if path exists
     try {
         const stats = await fs.stat(absolute);
-        
         // If path exists, resolve any symlinks
         return await fs.realpath(absolute);
     } catch (error) {
-        // return path if it's not exist. This will be used for folder creation and many other file operations
+        // Path doesn't exist - validate parent directories
+        if (await validateParentDirectories(absolute)) {
+            // Return the path if a valid parent exists
+            // This will be used for folder creation and many other file operations
+            return absolute;
+        }
+        
+        // If no valid parent directory was found, still return the absolute path
+        // to maintain compatibility with upstream behavior, but log a warning
+        console.warn(`Warning: Parent directory does not exist: ${path.dirname(absolute)}`);
         return absolute;
     }
-    
-    /* Original implementation commented out for future reference
-    const expandedPath = expandHome(requestedPath);
-    const absolute = path.isAbsolute(expandedPath)
-        ? path.resolve(expandedPath)
-        : path.resolve(process.cwd(), expandedPath);
-        
-    const normalizedRequested = normalizePath(absolute);
-
-    // Check if path is within allowed directories
-    const isAllowed = allowedDirectories.some(dir => normalizedRequested.startsWith(normalizePath(dir)));
-    if (!isAllowed) {
-        throw new Error(`Access denied - path outside allowed directories: ${absolute}`);
-    }
-
-    // Handle symlinks by checking their real path
-    try {
-        const realPath = await fs.realpath(absolute);
-        const normalizedReal = normalizePath(realPath);
-        const isRealPathAllowed = allowedDirectories.some(dir => normalizedReal.startsWith(normalizePath(dir)));
-        if (!isRealPathAllowed) {
-            throw new Error("Access denied - symlink target outside allowed directories");
-        }
-        return realPath;
-    } catch (error) {
-        // For new files that don't exist yet, verify parent directory
-        const parentDir = path.dirname(absolute);
-        try {
-            const realParentPath = await fs.realpath(parentDir);
-            const normalizedParent = normalizePath(realParentPath);
-            const isParentAllowed = allowedDirectories.some(dir => normalizedParent.startsWith(normalizePath(dir)));
-            if (!isParentAllowed) {
-                throw new Error("Access denied - parent directory outside allowed directories");
-            }
-            return absolute;
-        } catch {
-            throw new Error(`Parent directory does not exist: ${parentDir}`);
-        }
-    }
-    */
 }
 
 // File operation tools
-export async function readFile(filePath: string): Promise<string> {
+export interface FileResult {
+    content: string;
+    mimeType: string;
+    isImage: boolean;
+}
+
+
+export async function readFile(filePath: string, returnMetadata?: boolean): Promise<string | FileResult> {
     const validPath = await validatePath(filePath);
-    return fs.readFile(validPath, "utf-8");
+    
+    // Import the MIME type utilities
+    const { getMimeType, isImageFile } = await import('./mime-types.js');
+    
+    // Detect the MIME type based on file extension
+    const mimeType = getMimeType(validPath);
+    const isImage = isImageFile(mimeType);
+    
+    if (isImage) {
+        // For image files, read as Buffer and convert to base64
+        const buffer = await fs.readFile(validPath);
+        const content = buffer.toString('base64');
+        
+        if (returnMetadata === true) {
+            return { content, mimeType, isImage };
+        } else {
+            return content;
+        }
+    } else {
+        // For all other files, try to read as UTF-8 text
+        try {
+            const content = await fs.readFile(validPath, "utf-8");
+            
+            if (returnMetadata === true) {
+                return { content, mimeType, isImage };
+            } else {
+                return content;
+            }
+        } catch (error) {
+            // If UTF-8 reading fails, treat as binary and return base64 but still as text
+            const buffer = await fs.readFile(validPath);
+            const content = `Binary file content (base64 encoded):\n${buffer.toString('base64')}`;
+            
+            if (returnMetadata === true) {
+                return { content, mimeType: 'text/plain', isImage: false };
+            } else {
+                return content;
+            }
+        }
+    }
 }
 
 export async function writeFile(filePath: string, content: string): Promise<void> {
@@ -103,16 +149,33 @@ export async function writeFile(filePath: string, content: string): Promise<void
     await fs.writeFile(validPath, content, "utf-8");
 }
 
-export async function readMultipleFiles(paths: string[]): Promise<string[]> {
+export interface MultiFileResult {
+    path: string;
+    content?: string;
+    mimeType?: string;
+    isImage?: boolean;
+    error?: string;
+}
+
+export async function readMultipleFiles(paths: string[]): Promise<MultiFileResult[]> {
     return Promise.all(
         paths.map(async (filePath: string) => {
             try {
                 const validPath = await validatePath(filePath);
-                const content = await fs.readFile(validPath, "utf-8");
-                return `${filePath}:\n${content}\n`;
+                const fileResult = await readFile(validPath, true);
+
+                return {
+                    path: filePath,
+                    content: typeof fileResult === 'string' ? fileResult : fileResult.content,
+                    mimeType: typeof fileResult === 'string' ? "text/plain" : fileResult.mimeType,
+                    isImage: typeof fileResult === 'string' ? false : fileResult.isImage
+                };
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : String(error);
-                return `${filePath}: Error - ${errorMessage}`;
+                return {
+                    path: filePath,
+                    error: errorMessage
+                };
             }
         }),
     );

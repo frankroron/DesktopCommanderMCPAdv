@@ -108,6 +108,12 @@ The setup command will:
 - Configure Claude's desktop app
 - Add MCP servers to Claude's config if needed
 
+### Updating Desktop Commander
+
+When installed through npx (Option 1) or Smithery (Option 2), Desktop Commander will automatically update to the latest version whenever you restart Claude. No manual update process is needed.
+
+For manual installations, you can update by running the setup command again.
+
 ## Usage
 
 The server provides these tool categories:
@@ -125,7 +131,7 @@ The server provides these tool categories:
 - `ssh_download_file`: Download files from remote servers via SSH/SFTP
 
 ### Filesystem Tools
-- `read_file`/`write_file`: File operations
+- `read_file`/`write_file`: File operations (supports viewing PNG, JPEG, GIF, and WebP images directly in Claude)
 - `create_directory`/`list_directory`: Directory management  
 - `move_file`: Move/rename files
 - `search_files`: Pattern-based file search
@@ -251,7 +257,7 @@ Join our [Discord server](https://discord.gg/kQ27sNnZr7) to get help, share feed
 https://www.youtube.com/watch?v=ly3bed99Dy8&lc=UgztdHvDMqTb9jiqnf54AaABAg](https://www.youtube.com/watch?v=ly3bed99Dy8&lc=UgztdHvDMqTb9jiqnf54AaABAg
 )
 
-[![Great! I just used Windsurf, bought license a week ago, for upgrading old fullstack socket project and it works many times good or ok but also many times runs away in cascade and have to revert all changes loosing hundereds of cascade tokens. In just a week down to less than 100 tokens and do not want to buy only 300 tokens for 10$. This Claude MCP ,bought claude Pro finally needed but wanted very good reason to also have next to ChatGPT, and now can code as much as I want not worrying about token cost.
+[![Great! I just used Windsurf, bought license a week ago, for upgrading old fullstack socket project and it works many times good or ok but also many times runs away in cascade and have to revert all changes losing hundereds of cascade tokens. In just a week down to less than 100 tokens and do not want to buy only 300 tokens for 10$. This Claude MCP ,bought claude Pro finally needed but wanted very good reason to also have next to ChatGPT, and now can code as much as I want not worrying about token cost.
 Also this is much more than code editing it is much more thank you for great video!](https://raw.githubusercontent.com/wonderwhy-er/ClaudeComputerCommander/main/testemonials/img_2.png)
 https://www.youtube.com/watch?v=ly3bed99Dy8&lc=UgyQFTmYLJ4VBwIlmql4AaABAg](https://www.youtube.com/watch?v=ly3bed99Dy8&lc=UgyQFTmYLJ4VBwIlmql4AaABAg)
 
@@ -291,6 +297,9 @@ Unlike IDE-focused tools, Claude Desktop Commander provides a solution-centric a
 
 ### Do I need to pay for API credits?
 No. This tool works with Claude Desktop's standard Pro subscription ($20/month), not with API calls, so you won't incur additional costs beyond the subscription fee.
+
+### Does Desktop Commander automatically update?
+Yes, when installed through npx or Smithery, Desktop Commander automatically updates to the latest version when you restart Claude. No manual update process is needed.
 
 ### What are the most common use cases?
 - Exploring and understanding complex codebases
