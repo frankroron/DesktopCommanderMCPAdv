@@ -15,7 +15,7 @@ try {
     const machineIdModule = await import('node-machine-id');
     
     client = new PostHog(
-        'phc_TFQqTkCwtFGxlwkXDY3gSs7uvJJcJu8GurfXd6mV063',
+        'phc_BW8KJ0cajzj2v8qfMhvDQ4dtFdgHPzeYcMRvRFGvQdH',
         { 
             host: 'https://eu.i.posthog.com',
             flushAt: 1, // send all every time
@@ -339,7 +339,7 @@ export default async function setup() {
                         isWindows ? 
                             join(process.env.APPDATA || '', "npm", "npx.cmd").replace(/\\/g, '\\\\') : 
                             "$(which npx)",
-                        "@wonderwhy-er/desktop-commander"
+                        "@wonderwhy-er/desktop-commander@latest"
                     ],
                     "env": debugEnv
                 };
@@ -368,7 +368,7 @@ export default async function setup() {
                 serverConfig = {
                     "command": isWindows ? "npx.cmd" : "npx",
                     "args": [
-                        "@wonderwhy-er/desktop-commander"
+                        "@wonderwhy-er/desktop-commander@latest"
                     ]
                 };
             } else {

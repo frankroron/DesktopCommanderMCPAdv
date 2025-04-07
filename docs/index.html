@@ -236,7 +236,7 @@
     </style>
     <script>
         !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSurveysLoaded onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug getPageViewId captureTraceFeedback captureTraceMetric".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
-        posthog.init('phc_TFQqTkCwtFGxlwkXDY3gSs7uvJJcJu8GurfXd6mV063', {
+        posthog.init('phc_BW8KJ0cajzj2v8qfMhvDQ4dtFdgHPzeYcMRvRFGvQdH', {
             api_host: 'https://eu.i.posthog.com',
             person_profiles: 'identified_only', // or 'always' to create profiles for anonymous users as well
         })
@@ -288,10 +288,10 @@
                             </a>
                         </div>
                         <div class="badge-row" style="margin-top: 8px;">
-                            <img src="https://img.shields.io/badge/Commands%20Run-15212-blue" alt="Commands Run" width="140" height="20">
-                            <img src="https://img.shields.io/badge/Files%20Read-13818-green" alt="Files Read" width="140" height="20">
-                            <img src="https://img.shields.io/badge/Files%20Edited-12920-orange" alt="Files Edited" width="140" height="20">
-                            <img src="https://img.shields.io/badge/Files%20Created-11445-purple" alt="Files Created" width="140" height="20">
+                            <img src="https://img.shields.io/badge/Commands%20Run-220388-blue" alt="Commands Run" width="140" height="20">
+                            <img src="https://img.shields.io/badge/Files%20Read-94821-green" alt="Files Read" width="140" height="20">
+                            <img src="https://img.shields.io/badge/Files%20Edited-98450-orange" alt="Files Edited" width="140" height="20">
+                            <img src="https://img.shields.io/badge/Files%20Created-74845-purple" alt="Files Created" width="140" height="20">
                         </div>
                     </div>
                     <div class="hero-btns">
@@ -462,6 +462,7 @@
             
             <div class="tabs">
                 <button class="tab-btn active" onclick="openTab(event, 'npx')" style="color: #0056b3;">NPX Install</button>
+                <button class="tab-btn" onclick="openTab(event, 'bash')" style="color: #121212; font-weight: 500;">Bash Install (macOS)</button>
                 <button class="tab-btn" onclick="openTab(event, 'smithery')" style="color: #121212; font-weight: 500;">Smithery Install</button>
                 <button class="tab-btn" onclick="openTab(event, 'manual')" style="color: #121212; font-weight: 500;">Manual Configuration</button>
                 <button class="tab-btn" onclick="openTab(event, 'local')" style="color: #121212; font-weight: 500;">Local Installation</button>
@@ -483,10 +484,29 @@
                         <h3>NPX Install</h3>
                         <p>Install using npx directly:</p>
                         <pre style="background: #f4f4f4; padding: 10px; overflow-x: auto; border-radius: 5px; margin-top: 10px; white-space: pre-wrap; word-break: break-word;">npx @wonderwhy-er/desktop-commander@latest setup</pre>
+                        <p>For macOS users, you can also use this bash script:</p>
+                        <pre style="background: #f4f4f4; padding: 10px; overflow-x: auto; border-radius: 5px; margin-top: 10px; white-space: pre-wrap; word-break: break-word;">curl -fsSL https://raw.githubusercontent.com/wonderwhy-er/DesktopCommanderMCP/refs/heads/main/install.sh | bash</pre>
                     </div>
                 </div>
             </div>
             
+            <div id="bash" class="tab-content">
+                <div class="step">
+                    <div class="step-content">
+                        <h3>Bash Install (macOS)</h3>
+                        <p>For macOS users, use our automated bash installer which will:</p>
+                        <ul style="margin-bottom: 15px; padding-left: 20px;">
+                            <li>Check your Node.js version and install it if needed</li>
+                            <li>Set up Desktop Commander automatically</li>
+                            <li>Configure all necessary dependencies</li>
+                        </ul>
+                        <pre
+                            style="background: #f4f4f4; padding: 10px; overflow-x: auto; border-radius: 5px; margin-top: 10px; white-space: pre-wrap; word-break: break-word;">curl -fsSL https://raw.githubusercontent.com/wonderwhy-er/DesktopCommanderMCP/refs/heads/feat/install_sh_script/install.sh | bash</pre>
+                        <p style="margin-top: 10px; font-style: italic;">This is the simplest installation method for macOS users.
+                        </p>
+                    </div>
+                </div>
+            </div>
             <div id="manual" class="tab-content">
                 <div class="step">
                     <div class="step-content">
