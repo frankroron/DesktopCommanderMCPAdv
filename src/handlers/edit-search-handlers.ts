@@ -1,38 +1,42 @@
-import { 
-    parseEditBlock, 
-    performSearchReplace 
+import {
+    parseEditBlock,
+    performSearchReplace
 } from '../tools/edit.js';
 
-import { 
-    searchTextInFiles 
+import {
+    searchTextInFiles
 } from '../tools/search.js';
 
-import { 
+import {
     EditBlockArgsSchema,
     SearchCodeArgsSchema
 } from '../tools/schemas.js';
 
-import { withTimeout } from '../utils.js';
+import {ServerResult} from '../types.js';
+import {capture, withTimeout} from '../utils.js';
+import {createErrorResponse} from '../error-handlers.js';
 
 /**
  * Handle edit_block command
  */
-export async function handleEditBlock(args: unknown) {
+export async function handleEditBlock(args: unknown): Promise<ServerResult> {
     const parsed = EditBlockArgsSchema.parse(args);
-    const { filePath, searchReplace } = await parseEditBlock(parsed.blockContent);
-    await performSearchReplace(filePath, searchReplace);
-    return {
-        content: [{ type: "text", text: `Successfully applied edit to ${filePath}` }],
-    };
+    const {filePath, searchReplace, error} = await parseEditBlock(parsed.blockContent);
+
+    if (error) {
+        return createErrorResponse(error);
+    }
+
+    return performSearchReplace(filePath, searchReplace);
 }
 
 /**
  * Handle search_code command
  */
-export async function handleSearchCode(args: unknown) {
+export async function handleSearchCode(args: unknown): Promise<ServerResult> {
     const parsed = SearchCodeArgsSchema.parse(args);
     const timeoutMs = parsed.timeoutMs || 30000; // 30 seconds default
-    
+
     // Apply timeout at the handler level
     const searchOperation = async () => {
         return await searchTextInFiles({
@@ -46,7 +50,7 @@ export async function handleSearchCode(args: unknown) {
             // Don't pass timeoutMs down to the implementation
         });
     };
-    
+
     // Use withTimeout at the handler level
     const results = await withTimeout(
         searchOperation(),
@@ -54,7 +58,7 @@ export async function handleSearchCode(args: unknown) {
         'Code search operation',
         [] // Empty array as default on timeout
     );
-    
+
     // If timeout occurred, try to terminate the ripgrep process
     if (results.length === 0 && (globalThis as any).currentSearchProcess) {
         try {
@@ -62,18 +66,20 @@ export async function handleSearchCode(args: unknown) {
             (globalThis as any).currentSearchProcess.kill();
             delete (globalThis as any).currentSearchProcess;
         } catch (error) {
-            console.error('Error terminating search process:', error);
+            capture('server_request_error', {
+                error: 'Error terminating search process'
+            });
         }
     }
-    
+
     if (results.length === 0) {
         if (timeoutMs > 0) {
             return {
-                content: [{ type: "text", text: `No matches found or search timed out after ${timeoutMs}ms.` }],
+                content: [{type: "text", text: `No matches found or search timed out after ${timeoutMs}ms.`}],
             };
         }
         return {
-            content: [{ type: "text", text: "No matches found" }],
+            content: [{type: "text", text: "No matches found"}],
         };
     }
 
@@ -82,14 +88,14 @@ export async function handleSearchCode(args: unknown) {
     let formattedResults = "";
 
     results.forEach(result => {
-      if (result.file !== currentFile) {
-        formattedResults += `\n${result.file}:\n`;
-        currentFile = result.file;
-      }
-      formattedResults += `  ${result.line}: ${result.match}\n`;
+        if (result.file !== currentFile) {
+            formattedResults += `\n${result.file}:\n`;
+            currentFile = result.file;
+        }
+        formattedResults += `  ${result.line}: ${result.match}\n`;
     });
 
     return {
-      content: [{ type: "text", text: formattedResults.trim() }],
+        content: [{type: "text", text: formattedResults.trim()}],
     };
 }
