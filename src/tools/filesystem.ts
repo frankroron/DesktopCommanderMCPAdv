@@ -3,24 +3,34 @@ import path from "path";
 import os from 'os';
 import fetch from 'cross-fetch';
 import {capture, withTimeout} from '../utils.js';
+import {configManager} from '../config-manager.js';
 
-// Store allowed directories - temporarily allowing all paths
-// TODO: Make this configurable through a configuration file
-const allowedDirectories: string[] = [
-    "/" // Root directory - effectively allows all paths
-];
-
-// Original implementation commented out for future reference
-/*
-const allowedDirectories: string[] = [
-    process.cwd(), // Current working directory
-    os.homedir()   // User's home directory
-];
-*/
+// Initialize allowed directories from configuration
+async function getAllowedDirs(): Promise<string[]> {
+    try {
+        let allowedDirectories;
+        const config = await configManager.getConfig();
+        if (config.allowedDirectories && Array.isArray(config.allowedDirectories)) {
+            allowedDirectories = config.allowedDirectories;
+        } else {
+            // Fall back to default directories if not configured
+            allowedDirectories = [
+                os.homedir()   // User's home directory
+            ];
+            // Update config with default
+            await configManager.setValue('allowedDirectories', allowedDirectories);
+        }
+        return allowedDirectories;
+    } catch (error) {
+        console.error('Failed to initialize allowed directories:', error);
+        // Keep the default permissive path
+    }
+    return [];
+}
 
 // Normalize all paths consistently
 function normalizePath(p: string): string {
-    return path.normalize(p).toLowerCase();
+    return path.normalize(expandHome(p)).toLowerCase();
 }
 
 function expandHome(filepath: string): string {
@@ -57,13 +67,62 @@ async function validateParentDirectories(directoryPath: string): Promise<boolean
 }
 
 /**
+ * Checks if a path is within any of the allowed directories
+ * 
+ * @param pathToCheck Path to check
+ * @returns boolean True if path is allowed
+ */
+async function isPathAllowed(pathToCheck: string): Promise<boolean> {
+    // If root directory is allowed, all paths are allowed
+    const allowedDirectories = await getAllowedDirs();
+    if (allowedDirectories.includes('/') || allowedDirectories.length === 0) {
+        return true;
+    }
+
+    let normalizedPathToCheck = normalizePath(pathToCheck);
+    if(normalizedPathToCheck.slice(-1) === path.sep) {
+        normalizedPathToCheck = normalizedPathToCheck.slice(0, -1);
+    }
+
+    // Check if the path is within any allowed directory
+    const isAllowed = allowedDirectories.some(allowedDir => {
+        let normalizedAllowedDir = normalizePath(allowedDir);
+        if(normalizedAllowedDir.slice(-1) === path.sep) {
+            normalizedAllowedDir = normalizedAllowedDir.slice(0, -1);
+        }
+
+        // Check if path is exactly the allowed directory
+        if (normalizedPathToCheck === normalizedAllowedDir) {
+            return true;
+        }
+        
+        // Check if path is a subdirectory of the allowed directory
+        // Make sure to add a separator to prevent partial directory name matches
+        // e.g. /home/user vs /home/username
+        const subdirCheck = normalizedPathToCheck.startsWith(normalizedAllowedDir + path.sep);
+        if (subdirCheck) {
+            return true;
+        }
+        
+        // If allowed directory is the root (C:\ on Windows), allow access to the entire drive
+        if (normalizedAllowedDir === 'c:' && process.platform === 'win32') {
+            return normalizedPathToCheck.startsWith('c:');
+        }
+
+        return false;
+    });
+
+    return isAllowed;
+}
+
+/**
  * Validates a path to ensure it can be accessed or created.
  * For existing paths, returns the real path (resolving symlinks).
  * For non-existent paths, validates parent directories to ensure they exist.
  * 
  * @param requestedPath The path to validate
  * @returns Promise<string> The validated path
- * @throws Error if the path or its parent directories don't exist
+ * @throws Error if the path or its parent directories don't exist or if the path is not allowed
  */
 export async function validatePath(requestedPath: string): Promise<string> {
     const PATH_VALIDATION_TIMEOUT = 10000; // 10 seconds timeout
@@ -76,6 +135,11 @@ export async function validatePath(requestedPath: string): Promise<string> {
         const absolute = path.isAbsolute(expandedPath)
             ? path.resolve(expandedPath)
             : path.resolve(process.cwd(), expandedPath);
+            
+        // Check if path is allowed
+        if (!(await isPathAllowed(absolute))) {
+            throw(`Path not allowed: ${requestedPath}. Must be within one of these directories: ${(await getAllowedDirs()).join(', ')}`);
+        }
         
         // Check if path exists
         try {
@@ -104,7 +168,7 @@ export async function validatePath(requestedPath: string): Promise<string> {
     
     if (result === null) {
         // Return a path with an error indicator instead of throwing
-        return `__ERROR__: Path validation timed out after ${PATH_VALIDATION_TIMEOUT/1000} seconds for: ${requestedPath}`;
+        throw new Error(`Path validation failed for path: ${requestedPath}`);
     }
     
     return result;
@@ -121,10 +185,9 @@ export interface FileResult {
 /**
  * Read file content from a URL
  * @param url URL to fetch content from
- * @param returnMetadata Whether to return metadata with the content
  * @returns File content or file result with metadata
  */
-export async function readFileFromUrl(url: string, returnMetadata?: boolean): Promise<string | FileResult> {
+export async function readFileFromUrl(url: string): Promise<FileResult> {
     // Import the MIME type utilities
     const { isImageFile } = await import('./mime-types.js');
     
@@ -154,20 +217,12 @@ export async function readFileFromUrl(url: string, returnMetadata?: boolean): Pr
             const buffer = await response.arrayBuffer();
             const content = Buffer.from(buffer).toString('base64');
             
-            if (returnMetadata === true) {
-                return { content, mimeType: contentType, isImage };
-            } else {
-                return content;
-            }
+            return { content, mimeType: contentType, isImage };
         } else {
             // For text content
             const content = await response.text();
             
-            if (returnMetadata === true) {
-                return { content, mimeType: contentType, isImage };
-            } else {
-                return content;
-            }
+            return { content, mimeType: contentType, isImage };
         }
     } catch (error) {
         // Clear the timeout to prevent memory leaks
@@ -178,16 +233,7 @@ export async function readFileFromUrl(url: string, returnMetadata?: boolean): Pr
             ? `URL fetch timed out after ${FETCH_TIMEOUT_MS}ms: ${url}`
             : `Failed to fetch URL: ${error instanceof Error ? error.message : String(error)}`;
 
-        capture('server_request_error', {error: errorMessage});
-        if (returnMetadata === true) {
-            return { 
-                content: `Error: ${errorMessage}`, 
-                mimeType: 'text/plain', 
-                isImage: false 
-            };
-        } else {
-            return `Error: ${errorMessage}`;
-        }
+        throw new Error(errorMessage);
     }
 }
 
@@ -197,10 +243,10 @@ export async function readFileFromUrl(url: string, returnMetadata?: boolean): Pr
  * @param returnMetadata Whether to return metadata with the content
  * @returns File content or file result with metadata
  */
-export async function readFileFromDisk(filePath: string, returnMetadata?: boolean): Promise<string | FileResult> {
+export async function readFileFromDisk(filePath: string): Promise<FileResult> {
     // Import the MIME type utilities
     const { getMimeType, isImageFile } = await import('./mime-types.js');
-    
+
     const validPath = await validatePath(filePath);
     
     // Check file size before attempting to read
@@ -210,18 +256,15 @@ export async function readFileFromDisk(filePath: string, returnMetadata?: boolea
         
         if (stats.size > MAX_SIZE) {
             const message = `File too large (${(stats.size / 1024).toFixed(2)}KB > ${MAX_SIZE / 1024}KB limit)`;
-            if (returnMetadata) {
-                return { 
-                    content: message, 
-                    mimeType: 'text/plain', 
-                    isImage: false 
-                };
-            } else {
-                return message;
-            }
+            return { 
+                content: message, 
+                mimeType: 'text/plain', 
+                isImage: false 
+            };
         }
     } catch (error) {
-        capture('server_request_error', {error: error});
+        console.error('error catch ' + error)
+        capture('server_read_file_error', {error: error});
         // If we can't stat the file, continue anyway and let the read operation handle errors
         //console.error(`Failed to stat file ${validPath}:`, error);
     }
@@ -239,44 +282,33 @@ export async function readFileFromDisk(filePath: string, returnMetadata?: boolea
             const buffer = await fs.readFile(validPath);
             const content = buffer.toString('base64');
             
-            if (returnMetadata === true) {
-                return { content, mimeType, isImage };
-            } else {
-                return content;
-            }
+            return { content, mimeType, isImage };
         } else {
             // For all other files, try to read as UTF-8 text
             try {
                 const content = await fs.readFile(validPath, "utf-8");
                 
-                if (returnMetadata === true) {
-                    return { content, mimeType, isImage };
-                } else {
-                    return content;
-                }
+                return { content, mimeType, isImage };
             } catch (error) {
                 // If UTF-8 reading fails, treat as binary and return base64 but still as text
                 const buffer = await fs.readFile(validPath);
                 const content = `Binary file content (base64 encoded):\n${buffer.toString('base64')}`;
 
-                if (returnMetadata === true) {
-                    return { content, mimeType: 'text/plain', isImage: false };
-                } else {
-                    return content;
-                }
+                return { content, mimeType: 'text/plain', isImage: false };
             }
         }
     };
-    
     // Execute with timeout
     const result = await withTimeout(
         readOperation(),
         FILE_READ_TIMEOUT,
         `Read file operation for ${filePath}`,
-        returnMetadata ? 
-            { content: `Operation timed out after ${FILE_READ_TIMEOUT/1000} seconds`, mimeType: 'text/plain', isImage: false } : 
-            `Operation timed out after ${FILE_READ_TIMEOUT/1000} seconds`
+        null
     );
+    if (result == null) {
+        // Handles the impossible case where withTimeout resolves to null instead of throwing
+        throw new Error('Failed to read the file');
+    }
     
     return result;
 }
@@ -288,10 +320,10 @@ export async function readFileFromDisk(filePath: string, returnMetadata?: boolea
  * @param isUrl Whether the path is a URL
  * @returns File content or file result with metadata
  */
-export async function readFile(filePath: string, returnMetadata?: boolean, isUrl?: boolean): Promise<string | FileResult> {
+export async function readFile(filePath: string, isUrl?: boolean): Promise<FileResult> {
     return isUrl 
-        ? readFileFromUrl(filePath, returnMetadata)
-        : readFileFromDisk(filePath, returnMetadata);
+        ? readFileFromUrl(filePath)
+        : readFileFromDisk(filePath);
 }
 
 export async function writeFile(filePath: string, content: string): Promise<void> {
@@ -312,7 +344,7 @@ export async function readMultipleFiles(paths: string[]): Promise<MultiFileResul
         paths.map(async (filePath: string) => {
             try {
                 const validPath = await validatePath(filePath);
-                const fileResult = await readFile(validPath, true);
+                const fileResult = await readFile(validPath);
 
                 return {
                     path: filePath,
@@ -394,6 +426,5 @@ export async function getFileInfo(filePath: string): Promise<Record<string, any>
     };
 }
 
-export function listAllowedDirectories(): string[] {
-    return ["/ (All paths are currently allowed)"];
-}
+// This function has been replaced with configManager.getConfig()
+// Use get_config tool to retrieve allowedDirectories
